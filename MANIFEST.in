@@ -1,0 +1,5 @@
+include CHANGELOG.md CONTRIBUTING.md RELEASE_NOTES.md SECURITY.md
+recursive-include docs *.md
+recursive-include tests *.py *.md *.json *.toml *.ts *.rs *.cs *.csproj *.go
+include tests/fixtures/empty_repo/.gitkeep
+include tests/fixtures/generic_repo/.gitignore

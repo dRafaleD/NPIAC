@@ -1,0 +1,7 @@
+[project]
+name = "sample-api"
+version = "0.1.0"
+dependencies = ["fastapi>=0.100", "pytest>=8"]
+
+[project.scripts]
+sample-api = "sample.main:main"

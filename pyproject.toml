@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "npiac"
+version = "0.6.0"
+description = "Generate compact, deterministic repository context for coding agents"
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "NPIAC contributors" }]
+keywords = ["ai", "coding-agents", "context", "developer-tools", "repository-analysis"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Documentation",
+]
+dependencies = []
+
+[project.scripts]
+npiac = "npiac.cli:main"
+repocontext = "npiac.cli:deprecated_main"
+
+[project.urls]
+Source = "https://github.com/dRafaleD/NPIAC"
+Issues = "https://github.com/dRafaleD/NPIAC/issues"
+Changelog = "https://github.com/dRafaleD/NPIAC/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["src"]

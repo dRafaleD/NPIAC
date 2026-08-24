@@ -1,0 +1,6 @@
+{
+  "name": "sample-web",
+  "scripts": {"dev": "vite", "test": "vitest"},
+  "dependencies": {"express": "latest", "next": "latest", "pg": "latest", "react": "latest"},
+  "devDependencies": {"typescript": "latest", "vite": "latest", "vitest": "latest"}
+}
