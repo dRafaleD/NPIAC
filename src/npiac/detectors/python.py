@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 
 from ..models import DetectionResult, RepositorySnapshot
-from .base import analysis_paths
+from .base import analysis_paths, read_manifest_text
 
 
 def _flatten_dependencies(data: dict) -> set[str]:
@@ -55,7 +55,7 @@ class PythonDetector:
         for manifest in pyprojects:
             result.package_managers.add("pip")
             try:
-                data = tomllib.loads((snapshot.root / manifest).read_text(encoding="utf-8"))
+                data = tomllib.loads(read_manifest_text(snapshot, manifest))
                 base = Path(manifest).parent.as_posix()
                 prefix = "" if base == "." else base + "/"
                 name_priority = 100 if manifest == "pyproject.toml" else 60
@@ -83,7 +83,7 @@ class PythonDetector:
         for path in requirement_files:
             result.package_managers.add("pip")
             try:
-                for line in (snapshot.root / path).read_text(encoding="utf-8").splitlines():
+                for line in read_manifest_text(snapshot, path).splitlines():
                     line = line.strip()
                     if line and not line.startswith(("#", "-")):
                         dependencies.add(_dependency_name(line))

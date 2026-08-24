@@ -2,6 +2,14 @@
 
 All notable changes to NPIAC are documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- Confined output writes to safe non-symlink paths inside the selected repository, including when `--force` is used.
+- Added root-containment revalidation, fail-closed ignore handling, bounded manifest/scanner resources, and filesystem-fallback `.gitignore` filtering.
+- Hardened Ollama redirect/base-URL handling, source-excerpt redaction, debug-log redaction, and untrusted Markdown metadata rendering.
+
 ## [0.6.0] - 2026-08-24
 
 First public beta release.

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from ..models import DetectionResult, RepositorySnapshot
-from .base import analysis_paths
+from .base import analysis_paths, read_manifest_text
 
 
 class JavaScriptDetector:
@@ -31,7 +31,7 @@ class JavaScriptDetector:
         dependencies: set[str] = set()
         for manifest in manifests:
             try:
-                data = json.loads((snapshot.root / manifest).read_text(encoding="utf-8"))
+                data = json.loads(read_manifest_text(snapshot, manifest))
                 if isinstance(data.get("name"), str):
                     result.project_names.append((100 if manifest == "package.json" else 60, data["name"]))
                 for key in ("dependencies", "devDependencies", "peerDependencies"):

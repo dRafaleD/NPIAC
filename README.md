@@ -155,6 +155,8 @@ docs/generated/
 
 Rules are ordered and support comments, globs, directory patterns ending in `/`, and `!` negation. The legacy `.repocontextignore` filename remains supported temporarily and is evaluated before `.npiacignore`.
 
+Sensitive-file exclusions always take precedence over negation rules. NPIAC stops safely if an ignore file exists but cannot be read or validated.
+
 ## Supported ecosystems
 
 - Python: `pyproject.toml`, `requirements.txt`, FastAPI, Flask, Django
@@ -172,6 +174,8 @@ Detection is heuristic and manifest-driven. NPIAC does not perform AST analysis 
 - Optional Ollama enrichment is sent only to the configured Ollama endpoint, which defaults to localhost.
 - Safe excerpts are bounded per file and across the complete prompt.
 - Secret-like files, credentials, private keys, lockfile contents, ignored paths, binaries, unsafe symlinks, and generated NPIAC output are excluded from AI input according to the current safeguards.
+- Output files must remain inside the selected repository; symlinked output paths, sensitive filenames, and version-control metadata are rejected even with `--force`.
+- Ollama redirects are not followed, credential-bearing base URLs are rejected, and AI debug diagnostics are bounded and redacted.
 
 These safeguards reduce accidental disclosure but do not replace repository access controls or a dedicated secret scanner. Review generated context before sharing it outside your trust boundary.
 

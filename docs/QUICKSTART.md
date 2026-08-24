@@ -24,6 +24,8 @@ npiac .
 
 The default output is `CONTEXT.md`. Existing NPIAC-generated output can be refreshed safely; overwriting another file requires `--force`.
 
+Output paths must resolve inside the selected repository. NPIAC rejects parent traversal, outside absolute paths, symlink/junction components, version-control metadata, and known sensitive filenames. `--force` does not bypass these boundaries.
+
 ```bash
 npiac . --stdout
 npiac . --output docs/PROJECT_CONTEXT.md
@@ -51,6 +53,8 @@ docs/generated/
 ```
 
 Rules are ordered. Later matches override earlier ones. The deprecated `.repocontextignore` filename is still accepted and is evaluated before `.npiacignore`.
+
+Sensitive-file exclusions cannot be negated. If an ignore file is unreadable, invalid, oversized, or a symlink, NPIAC stops instead of scanning without its privacy rules.
 
 ## Add local Ollama enrichment
 

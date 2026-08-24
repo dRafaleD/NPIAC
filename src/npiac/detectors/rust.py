@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 
 from ..models import DetectionResult, RepositorySnapshot
-from .base import analysis_paths
+from .base import analysis_paths, read_manifest_text
 
 
 class RustDetector:
@@ -22,7 +22,7 @@ class RustDetector:
         result.package_managers.add("Cargo")
         for manifest in manifests:
             try:
-                data = tomllib.loads((snapshot.root / manifest).read_text(encoding="utf-8"))
+                data = tomllib.loads(read_manifest_text(snapshot, manifest))
                 package = data.get("package", {})
                 if isinstance(package, dict) and isinstance(package.get("name"), str):
                     result.project_names.append((100 if manifest == "Cargo.toml" else 60, package["name"]))

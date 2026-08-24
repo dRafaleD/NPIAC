@@ -6,11 +6,12 @@ from pathlib import Path
 
 from .constants import GENERATED_MARKER, MANIFEST_NAMES, MAX_TREE_ENTRIES
 from .models import RepositoryContext
+from .safety import markdown_code, safe_markdown_inline
 from .selectors import render_tree
 
 
 def _bullet_list(values: Iterable[str]) -> list[str]:
-    return [f"- {value}" for value in values]
+    return [f"- {safe_markdown_inline(value)}" for value in values]
 
 
 TRIM_WARNING = "Content was trimmed to fit the requested budget."
@@ -26,7 +27,7 @@ def _render_full(context: RepositoryContext) -> str:
         "",
         "## Overview",
         "",
-        f"- Project name: {context.project_name}",
+        f"- Project name: {safe_markdown_inline(context.project_name, 300)}",
         f"- Repository type: {'Git' if context.is_git else 'Directory'}",
         f"- Languages: {', '.join(context.languages) if context.languages else 'None detected'}",
     ]
@@ -47,21 +48,26 @@ def _render_full(context: RepositoryContext) -> str:
 
     if context.important_files:
         lines.extend(["", "## Important Files", ""])
-        lines.extend(f"- `{item.path}` — {item.reason}" for item in context.important_files)
+        lines.extend(
+            f"- {markdown_code(item.path)} — {safe_markdown_inline(item.reason)}" for item in context.important_files
+        )
 
     if context.entry_points:
         lines.extend(["", "## Entry Points", ""])
-        lines.extend(f"- {label}: `{path}`" for label, path in context.entry_points)
+        lines.extend(
+            f"- {safe_markdown_inline(label, 300)}: {markdown_code(path)}" for label, path in context.entry_points
+        )
 
     if context.test_paths or context.test_frameworks:
         lines.extend(["", "## Tests", ""])
         if context.test_paths:
-            lines.append("- Paths: " + ", ".join(f"`{path}`" for path in context.test_paths))
+            lines.append("- Paths: " + ", ".join(markdown_code(path) for path in context.test_paths))
         if context.test_frameworks:
-            lines.append("- Frameworks: " + ", ".join(context.test_frameworks))
+            lines.append("- Frameworks: " + ", ".join(safe_markdown_inline(item) for item in context.test_frameworks))
 
     if context.config_files:
-        lines.extend(["", "## Configuration", "", *_bullet_list(f"`{path}`" for path in context.config_files)])
+        lines.extend(["", "## Configuration", ""])
+        lines.extend(f"- {markdown_code(path)}" for path in context.config_files)
 
     if context.notes:
         lines.extend(["", "## Detection Notes", "", *_bullet_list(context.notes)])
@@ -73,15 +79,15 @@ def _render_full(context: RepositoryContext) -> str:
                 "",
                 "## AI Enrichment",
                 "",
-                f"> Generated locally with Ollama model `{enrichment.model}`. Deterministic findings remain the source of truth.",
+                f"> Generated locally with Ollama model {markdown_code(enrichment.model)}. Deterministic findings remain the source of truth.",
                 "",
                 "### Project Purpose",
                 "",
-                enrichment.project_purpose,
+                safe_markdown_inline(enrichment.project_purpose),
                 "",
                 "### Architecture Summary",
                 "",
-                enrichment.architecture_summary,
+                safe_markdown_inline(enrichment.architecture_summary),
             ]
         )
         enrichment_sections = (

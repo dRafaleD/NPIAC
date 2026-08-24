@@ -7,10 +7,15 @@ import tempfile
 from pathlib import Path
 
 from .analyzer import analyze_repository
-from .constants import GENERATED_MARKER
+from .constants import GENERATED_MARKER, MAX_OUTPUT_MARKER_BYTES
 from .enrichment import enrich_context
 from .ollama import OllamaClient
 from .renderer import render_context
+from .safety import is_link, is_sensitive_path, lexical_path_within, normalize_repository_path
+
+
+class OutputPathError(ValueError):
+    """The requested output path is outside NPIAC's safe write boundary."""
 
 
 def _positive_integer(value: str) -> int:
@@ -56,15 +61,53 @@ def build_parser(prog: str = "npiac") -> argparse.ArgumentParser:
     return parser
 
 
-def _write_atomic(path: Path, content: str, force: bool) -> None:
+def _resolve_output_path(root: Path, value: str) -> Path:
+    requested = Path(value).expanduser()
+    candidate = requested if requested.is_absolute() else root / requested
+    candidate = Path(os.path.abspath(candidate))
+    if not lexical_path_within(root, candidate):
+        raise OutputPathError("Output path must stay within the repository root.")
+    relative = candidate.relative_to(root)
+    if not relative.parts:
+        raise OutputPathError("Output path must name a file within the repository root.")
+    normalized_relative = normalize_repository_path(relative.as_posix())
+    if normalized_relative is None:
+        raise OutputPathError("Output path contains unsafe characters or path components.")
+    if any(part.casefold() in {".git", ".hg", ".svn"} for part in relative.parts[:-1]):
+        raise OutputPathError("Output path must not target version-control metadata.")
+    if is_sensitive_path(normalized_relative):
+        raise OutputPathError("Output path must not target a sensitive file name.")
+    cursor = root
+    for part in relative.parts:
+        cursor /= part
+        if is_link(cursor):
+            raise OutputPathError("Output path must not contain symlinks or junctions.")
+    try:
+        resolved = candidate.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise OutputPathError("Output path could not be resolved safely.") from exc
+    if not resolved.is_relative_to(root):
+        raise OutputPathError("Output path must stay within the repository root.")
+    return resolved
+
+
+def _write_atomic(root: Path, path: Path, content: str, force: bool) -> None:
+    if is_link(path):
+        raise OutputPathError("Output path must not be a symlink or junction.")
+    if path.exists() and not path.is_file():
+        raise FileExistsError(f"Refusing to overwrite a non-file output path: {path}")
     if path.exists() and not force:
         try:
-            existing = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as exc:
+            with path.open("rb") as handle:
+                existing = handle.read(MAX_OUTPUT_MARKER_BYTES)
+        except OSError as exc:
             raise FileExistsError(f"Cannot safely inspect existing output: {path}") from exc
-        if GENERATED_MARKER not in existing:
+        if not existing.startswith(GENERATED_MARKER.encode("utf-8")):
             raise FileExistsError(f"Refusing to overwrite existing file without --force: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
+    resolved_parent = path.parent.resolve(strict=True)
+    if not resolved_parent.is_relative_to(root) or is_link(path.parent):
+        raise OutputPathError("Output directory is outside the repository or became unsafe.")
     temporary_name: str | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -85,10 +128,7 @@ def _run(argv: list[str] | None, command_name: str) -> int:
     args = build_parser(command_name).parse_args(argv)
     try:
         root = Path(args.path).expanduser().resolve()
-        output = Path(args.output).expanduser()
-        if not output.is_absolute():
-            output = root / output
-        output = output.resolve()
+        output = _resolve_output_path(root, args.output)
         excluded: set[str] = set()
         try:
             excluded.add(output.relative_to(root).as_posix())
@@ -113,7 +153,7 @@ def _run(argv: list[str] | None, command_name: str) -> int:
                 sys.stdout.reconfigure(encoding="utf-8")
             sys.stdout.write(rendered)
         else:
-            _write_atomic(output, rendered, args.force)
+            _write_atomic(root, output, rendered, args.force)
             print(f"Generated {output}")
         return 0
     except (FileNotFoundError, NotADirectoryError) as exc:
@@ -122,6 +162,9 @@ def _run(argv: list[str] | None, command_name: str) -> int:
     except FileExistsError as exc:
         print(f"{command_name}: {exc}", file=sys.stderr)
         return 3
+    except OutputPathError as exc:
+        print(f"{command_name}: {exc}", file=sys.stderr)
+        return 2
     except OSError as exc:
         print(f"{command_name}: {exc}", file=sys.stderr)
         return 1

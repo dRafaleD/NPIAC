@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import re
 import socket
 from collections.abc import Callable
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .constants import MAX_AI_RESPONSE_BYTES
+from .safety import redact_sensitive_text
 
 
 class OllamaError(RuntimeError):
@@ -28,28 +29,12 @@ class OllamaQualityError(OllamaError):
 
 Diagnostic = Callable[[str], None]
 
-_DEBUG_SECRET_VALUE = re.compile(
-    r"(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?key|token|credential|private[_-]?key|authorization|dsn)\b"
-    r"(\s*(?:is|=|:)\s*[\\\"']?)([^\\\"',;\s}\]]+)"
-)
-_DEBUG_JSON_SECRET = re.compile(
-    r"(?i)([\"'](?:password|passwd|secret|api[_-]?key|access[_-]?key|token|credential|private[_-]?key|authorization|dsn)[\"']\s*:\s*[\"'])(.*?)([\"'])"
-)
-_DEBUG_BEARER = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]+")
-_DEBUG_PRIVATE_KEY = re.compile(
-    r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----",
-    re.DOTALL | re.IGNORECASE,
-)
 MAX_AI_DEBUG_CHARS = 8_000
 
 
 def safe_debug_text(value: object) -> str:
     """Bound and redact untrusted diagnostic text before it reaches stderr."""
-    text = str(value).replace("\x00", "�")
-    text = _DEBUG_PRIVATE_KEY.sub("[REDACTED PRIVATE KEY]", text)
-    text = _DEBUG_BEARER.sub("Bearer [REDACTED]", text)
-    text = _DEBUG_JSON_SECRET.sub(lambda match: f"{match.group(1)}[REDACTED]{match.group(3)}", text)
-    text = _DEBUG_SECRET_VALUE.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", text)
+    text = redact_sensitive_text(str(value).replace("\x00", "�"))
     if len(text) > MAX_AI_DEBUG_CHARS:
         text = text[: MAX_AI_DEBUG_CHARS - 16].rstrip() + "\n...[truncated]"
     return text
@@ -101,18 +86,49 @@ AI_RESPONSE_SCHEMA = {
 }
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_NO_REDIRECT_OPENER = build_opener(_NoRedirectHandler()).open
+
+
+def _normalize_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if not normalized or any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+        raise OllamaError("Ollama base URL is invalid.")
+    if "://" in normalized and not normalized.startswith(("http://", "https://")):
+        raise OllamaError("Ollama base URL must use HTTP or HTTPS.")
+    if not normalized.startswith(("http://", "https://")):
+        normalized = "http://" + normalized
+    try:
+        parsed = urlsplit(normalized)
+        port = parsed.port
+    except ValueError as exc:
+        raise OllamaError("Ollama base URL is invalid.") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise OllamaError("Ollama base URL must use HTTP or HTTPS.")
+    if parsed.username is not None or parsed.password is not None:
+        raise OllamaError("Ollama base URL must not contain credentials.")
+    if parsed.query or parsed.fragment:
+        raise OllamaError("Ollama base URL must not contain a query or fragment.")
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = host if port is None else f"{host}:{port}"
+    return urlunsplit((parsed.scheme, netloc, parsed.path.rstrip("/"), "", ""))
+
+
 class OllamaClient:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
         timeout: float = 60.0,
-        opener: Callable[..., object] = urlopen,
+        opener: Callable[..., object] = _NO_REDIRECT_OPENER,
         diagnostic: Diagnostic | None = None,
     ) -> None:
-        normalized = base_url.strip().rstrip("/")
-        if not normalized.startswith(("http://", "https://")):
-            normalized = "http://" + normalized
-        self.base_url = normalized
+        self.base_url = base_url
         self.timeout = timeout
         self._opener = opener
         self._diagnostic = diagnostic
@@ -122,6 +138,9 @@ class OllamaClient:
             self._diagnostic(safe_debug_text(message))
 
     def generate(self, model: str, prompt: str) -> dict[str, object]:
+        base_url = _normalize_base_url(self.base_url)
+        if not 0 < self.timeout <= 300:
+            raise OllamaError("Ollama timeout is outside the safe range.")
         payload = json.dumps(
             {
                 "model": model,
@@ -133,7 +152,7 @@ class OllamaClient:
             ensure_ascii=False,
         ).encode("utf-8")
         request = Request(
-            f"{self.base_url}/api/generate",
+            f"{base_url}/api/generate",
             data=payload,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
@@ -144,6 +163,13 @@ class OllamaClient:
                 if status is None and callable(getattr(response, "getcode", None)):
                     status = response.getcode()
                 self._debug(f"Ollama HTTP status: {status if status is not None else 'unknown'}")
+                if status is not None:
+                    try:
+                        successful = 200 <= int(status) < 300
+                    except (TypeError, ValueError) as exc:
+                        raise OllamaError("Ollama returned an invalid HTTP status.") from exc
+                    if not successful:
+                        raise OllamaError("Ollama returned an unexpected HTTP status.")
                 body = response.read(MAX_AI_RESPONSE_BYTES + 1)
         except HTTPError as exc:
             self._debug(f"Ollama HTTP status: {exc.code}")

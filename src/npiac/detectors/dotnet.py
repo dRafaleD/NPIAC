@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from ..models import DetectionResult, RepositorySnapshot
-from .base import analysis_paths
+from .base import analysis_paths, read_manifest_text
 
 
 class DotNetDetector:
@@ -18,7 +18,10 @@ class DotNetDetector:
         result.package_managers.add("NuGet")
         for project in projects:
             try:
-                root = ET.parse(snapshot.root / project).getroot()
+                manifest_text = read_manifest_text(snapshot, project)
+                if "<!DOCTYPE" in manifest_text.upper() or "<!ENTITY" in manifest_text.upper():
+                    raise ET.ParseError("DTD and entity declarations are not allowed")
+                root = ET.fromstring(manifest_text)
                 sdk = root.attrib.get("Sdk", "")
                 if "Web" in sdk:
                     result.frameworks.add("ASP.NET Core")
