@@ -4,6 +4,8 @@
 ![Python 3.11–3.14](https://img.shields.io/badge/python-3.11--3.14-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+![NPIAC terminal demo](assets/npiac-demo.gif)
+
 **Not Prompt, It’s Also Context.**
 
 NPIAC turns a local software repository into a compact, deterministic `CONTEXT.md` briefing for coding agents.
