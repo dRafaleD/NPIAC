@@ -77,7 +77,7 @@ def _git_files(root: Path) -> tuple[list[str] | None, bool, str | None]:
         return None, False, "Git is unavailable; used filesystem scanning."
     try:
         top = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            ["git", "-c", "core.fsmonitor=false", "-C", str(root), "rev-parse", "--show-toplevel"],
             check=True,
             capture_output=True,
             text=True,
@@ -85,7 +85,7 @@ def _git_files(root: Path) -> tuple[list[str] | None, bool, str | None]:
         ).stdout.strip()
         if Path(top).resolve() != root:
             return None, True, "Analyzed path is below the Git root; used filesystem scanning."
-        command = ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"]
+        command = ["git", "-c", "core.fsmonitor=false", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         if process.stdout is None:
             process.kill()
