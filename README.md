@@ -213,7 +213,7 @@ See [Architecture](docs/ARCHITECTURE.md) for module responsibilities and safety 
 
 ## Legacy compatibility
 
-The deprecated command remains available during the beta transition:
+The deprecated command is still available:
 
 ```bash
 repocontext .
@@ -230,11 +230,9 @@ It runs the same CLI and prints a warning directing users to `npiac`. New script
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
-## Status
+## Version
 
-**v0.6.0 Public Beta**
-
-NPIAC is ready for early public use, but CLI details and generated output may still evolve before v1.0. It is not presented as production-stable software.
+**v0.6.0**. CLI options and generated output may change between versions.
 
 ## Contributing
 
